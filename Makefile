@@ -98,6 +98,10 @@ LOADER_OBJS=init.o main.o debug.o
 # CORE=cores/snes9x2005
 # CONSOLE=snes
 
+ifeq ($(SMALL_MESSAGE), 1)
+CFLAGS += -DSMALL_MESSAGE
+endif
+
 # Default target
 ifneq ($(CORE),)
 all: core_87000000 bisrv.asd install

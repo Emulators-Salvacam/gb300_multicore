@@ -34,6 +34,7 @@ static void mono_mix_audio_sample_cb(int16_t left, int16_t right);
 static bool wrap_retro_load_game(const struct retro_game_info* info);
 static void wrap_retro_init(void);
 static void wrap_retro_deinit(void);
+static void wrap_retro_run(void);
 
 static void log_cb(enum retro_log_level level, const char *fmt, ...);
 
@@ -61,6 +62,8 @@ static char *fw_fps_counter_format = 0x806674a0;	// "%2d/%2d"
 static void fps_counter_enable(bool enable);
 
 
+static bool gb_temporary_osd = false;
+
 struct retro_core_t core_exports = {
    .retro_init = wrap_retro_init,
    .retro_deinit = wrap_retro_deinit,
@@ -75,7 +78,7 @@ struct retro_core_t core_exports = {
    .retro_set_input_state = retro_set_input_state,
    .retro_set_controller_port_device = retro_set_controller_port_device,
    .retro_reset = retro_reset,
-   .retro_run = retro_run,
+   .retro_run = wrap_retro_run,
    .retro_serialize_size = retro_serialize_size,
    .retro_serialize = retro_serialize,
    .retro_unserialize = retro_unserialize,
@@ -250,6 +253,64 @@ bool wrap_retro_load_game(const struct retro_game_info* info)
 	return ret;
 }
 
+static uint32_t g_osd_time = 0;
+static int slot_state = 0;
+
+void wrap_retro_run(void) {
+
+	// Disable the osd message after 2 seconds
+	if (gb_temporary_osd) {
+		if (os_get_tick_count() - g_osd_time > 1000) {
+			*fw_fps_counter_enable = 0;
+			gb_temporary_osd = false;
+		}
+	} else if (g_joy_task_state == 0x9800 || g_joy_task_state == 0x9400 
+		|| g_joy_task_state == 0x9020 || g_joy_task_state == 0x9080) { 
+		// Show osd message
+		gb_temporary_osd = true;
+		g_osd_time = os_get_tick_count();
+		if (g_joy_task_state == 0x9800) { // press L + R + Y	
+			*fw_fps_counter_enable = 1;
+			#if SMALL_MESSAGE == 1
+			sprintf(fw_fps_counter_format, "l%d", slot_state);
+			#else
+			sprintf(fw_fps_counter_format, "Load %d", slot_state);
+			#endif
+			state_load("");
+		} else if (g_joy_task_state == 0x9400) { // press L + R + X	
+			*fw_fps_counter_enable = 1;
+			#if SMALL_MESSAGE == 1
+			sprintf(fw_fps_counter_format, "s%d", slot_state);
+			#else
+			sprintf(fw_fps_counter_format, "Save %d", slot_state);
+			#endif
+			state_save("");
+		} else if (g_joy_task_state == 0x9020) { //press L + R + Right	
+			if (slot_state < 9) {
+				slot_state += 1;
+			}
+			*fw_fps_counter_enable = 1;
+			#if SMALL_MESSAGE == 1
+			sprintf(fw_fps_counter_format, "t%d", slot_state);
+			#else
+			sprintf(fw_fps_counter_format, "Slot %d", slot_state);
+			#endif
+		} else if (g_joy_task_state == 0x9080) { // press L + R + Left	
+			if (slot_state > 0) {
+				slot_state -= 1;
+			}
+			*fw_fps_counter_enable = 1;
+			#if SMALL_MESSAGE == 1
+			sprintf(fw_fps_counter_format, "t%d", slot_state);
+			#else
+			sprintf(fw_fps_counter_format, "Slot %d", slot_state);
+			#endif
+		}	
+	} 
+
+	retro_run();
+}
+
 void wrap_retro_set_environment(retro_environment_t cb)
 {
 	retro_set_environment(wrap_environ_cb);
@@ -388,6 +449,10 @@ void build_state_filepath(char *state_filepath, size_t size, const char *game_fi
 
 	// last char is the save slot number
 	char save_slot = frontend_state_filepath[strlen(frontend_state_filepath) - 1];
+
+	if (strlen(frontend_state_filepath) == 0) { 
+		save_slot = slot_state + '0'; //To convert integer to char only 0 to 9 will be converted. 
+	}
 
 	char basename[MAXPATH];
 	fill_pathname_base(basename, game_filepath, sizeof(basename));
