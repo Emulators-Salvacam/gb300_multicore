@@ -147,12 +147,13 @@ void dbg_show_noblock(unsigned short background_color, const char *fmt, ...)
 	lcd_vprintf(fmt, ap);
 	va_end(ap);
 
+	/*
 	for (int i=0; i<42; i++)
 	{
 		lcd_printf(".");
 		lcd_flush(background_color);
 	}
-
+	*/
 	os_enable_interrupt();
 }
 
