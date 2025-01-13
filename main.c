@@ -64,8 +64,8 @@ void load_and_run_core(const char *file_path, int load_state)
 	const char *corename;
 	const char *filename;
 	if (!parse_filename(file_path, &corename, &filename)) {
-		xlog("file not MC stub: calling run_gba\n");
 		dbg_show_noblock(0x00, "\n STOCK\n\n %s\n\n ", file_path); // black
+		xlog("l: file not MC stub, calling stock emu\n");
 		run_gba(file_path, load_state);
 		return;
 	}

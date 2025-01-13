@@ -5,6 +5,10 @@ SHELL:=/bin/bash
 CLEAR_LOG_ON_BOOT = 0
 # debug logging with xlog
 DEBUG_XLOG = 1
+# Enable on-screen debug output
+DEBUG_ON_SCREEN = 0
+
+SMALL_MESSAGE = 0
 # tweaks for the release build
 #ALPHARELEASE = 0.10
 
@@ -30,6 +34,12 @@ CFLAGS += -DCLEAR_LOG_ON_BOOT=1
 endif
 ifeq ($(DEBUG_XLOG), 1)
 CFLAGS += -DDEBUG_XLOG=1
+endif
+ifeq ($(DEBUG_ON_SCREEN), 1)
+CFLAGS += -DDEBUG_ON_SCREEN=1
+endif
+ifeq ($(SMALL_MESSAGE), 0)
+CFLAGS += -DSMALL_MESSAGE
 endif
 
 LDFLAGS := -EL -nostdlib -z max-page-size=32
@@ -97,10 +107,6 @@ LOADER_OBJS=init.o main.o debug.o
 
 # CORE=cores/snes9x2005
 # CONSOLE=snes
-
-ifeq ($(SMALL_MESSAGE), 1)
-CFLAGS += -DSMALL_MESSAGE
-endif
 
 # Default target
 ifneq ($(CORE),)
@@ -213,7 +219,9 @@ clean:
 	-rm -f loader.elf loader.bin core.elf core.elf.map core_87000000
 	-rm -f bisrv.asd crc
 	-rm -f libretro_core.a
+ifneq ($(CORE),)
 	$(MAKE) -j$(NPROC) -C $(CORE) $(MAKEFILE) clean platform=sf2000
+endif
 
 .PHONY: all clean
 
