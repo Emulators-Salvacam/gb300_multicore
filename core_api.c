@@ -272,17 +272,16 @@ void wrap_retro_run(void) {
 		// Show osd message
 		gb_temporary_osd = true;
 		g_osd_time = os_get_tick_count();
-		//if (g_joy_task_state == 0x9800) { // press L + R + Y	
-		if (g_joy_task_state == 0x1800) { // press L + Y	
+		if (g_joy_task_state == 0x9800) { // press L + R + Y	
 			*fw_fps_counter_enable = 1;
+
 			#if SMALL_MESSAGE == 1
 			sprintf(fw_fps_counter_format, "l%d", slot_state);
 			#else
 			sprintf(fw_fps_counter_format, "Load %d", slot_state);
 			#endif
 			state_load("");
-		//} else if (g_joy_task_state == 0x9400) { // press L + R + X	
-		} else if (g_joy_task_state == 0x1400) { // press L + X	
+		} else if (g_joy_task_state == 0x9400) { // press L + R + X	
 			*fw_fps_counter_enable = 1;
 			#if SMALL_MESSAGE == 1
 			sprintf(fw_fps_counter_format, "s%d", slot_state);
@@ -290,8 +289,7 @@ void wrap_retro_run(void) {
 			sprintf(fw_fps_counter_format, "Save %d", slot_state);
 			#endif
 			state_save("");
-		//} else if (g_joy_task_state == 0x9020) { //press L + R + Right	
-		} else if (g_joy_task_state == 0x1020) { //press L + Right	
+		} else if (g_joy_task_state == 0x9020) { //press L + R + Right	
 			if (slot_state < 9) {
 				slot_state += 1;
 			}
@@ -301,8 +299,7 @@ void wrap_retro_run(void) {
 			#else
 			sprintf(fw_fps_counter_format, "Slot %d", slot_state);
 			#endif
-		//} else if (g_joy_task_state == 0x9080) { // press L + R + Left	
-		} else if (g_joy_task_state == 0x1080) { // press L + Left	
+		} else if (g_joy_task_state == 0x9080) { // press L + R + Left	
 			if (slot_state > 0) {
 				slot_state -= 1;
 			}
