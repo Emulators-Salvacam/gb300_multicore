@@ -35,6 +35,7 @@ static bool wrap_retro_load_game(const struct retro_game_info* info);
 static void wrap_retro_init(void);
 static void wrap_retro_deinit(void);
 static void wrap_retro_run(void);
+static void wrap_retro_unload_game(void);
 
 static void log_cb(enum retro_log_level level, const char *fmt, ...);
 
@@ -53,6 +54,7 @@ static int16_t wrap_input_state_cb(unsigned port, unsigned device, unsigned inde
 
 static bool g_show_fps = false;
 static void frameskip_cb(BOOL flag);
+static bool g_per_state_srm = false;
 
 static void dummy_retro_run(void);
 
@@ -86,12 +88,69 @@ struct retro_core_t core_exports = {
    .retro_cheat_set = retro_cheat_set,
    .retro_load_game = wrap_retro_load_game,
    .retro_load_game_special = retro_load_game_special,
-   .retro_unload_game = retro_unload_game,
+   .retro_unload_game = wrap_retro_unload_game,
    .retro_get_region = retro_get_region,
    .retro_get_memory_data = retro_get_memory_data,
    .retro_get_memory_size = retro_get_memory_size,
 };
 
+void build_rom_filepath(
+	char *filepath, size_t size,
+	const char *game_filepath,
+	const char *extension,
+	size_t extension_size)
+{
+	char temp[size];
+	strncpy(temp, game_filepath, size);
+	temp[size-(2 + extension_size)]=0;
+	char * p = strrchr(temp, '.');
+	if(p) *p = 0;
+	snprintf(filepath, size, "%s.%s", temp, extension);
+}
+
+void save_srm(const char slot){
+	char ram_filepath[MAXPATH];
+	char ext[5];
+	snprintf(ext, 5, "srm%c", slot);
+	build_rom_filepath(ram_filepath, sizeof(ram_filepath), s_game_filepath, ext, 4);
+	size_t save_size = retro_get_memory_size(RETRO_MEMORY_SAVE_RAM);
+	if(save_size == 0)
+		return;
+	FILE *ram_file = fopen(ram_filepath, "wb");
+	if (!ram_file)
+		return;
+	fwrite(retro_get_memory_data(RETRO_MEMORY_SAVE_RAM), save_size, 1, ram_file);
+	fclose(ram_file);
+	fs_sync(ram_filepath);
+}
+
+void load_srm(const char slot){
+	size_t save_size = retro_get_memory_size(RETRO_MEMORY_SAVE_RAM);
+	char ram_filepath[MAXPATH];
+	char ext[5];
+	snprintf(ext, 5, "srm%c", slot);
+	build_rom_filepath(ram_filepath, sizeof(ram_filepath), s_game_filepath, ext, 4);
+	FILE *ram_file = fopen(ram_filepath, "rb");
+	if (!ram_file)
+		return;
+	fseeko(ram_file, 0, SEEK_END);
+	size_t ram_file_size = ftell(ram_file);
+	fseeko(ram_file, 0, SEEK_SET);
+	if(ram_file_size < save_size){
+		save_size = ram_file_size;
+	}
+	if(save_size == 0){
+		fclose(ram_file);
+		return;
+	}
+	fread(retro_get_memory_data(RETRO_MEMORY_SAVE_RAM), 1, save_size, ram_file);
+	fclose(ram_file);
+}
+
+void wrap_retro_unload_game(void){
+	save_srm(0);
+	retro_unload_game();
+}
 
 static void clear_bss()
 {
@@ -243,11 +302,15 @@ bool wrap_retro_load_game(const struct retro_game_info* info)
 		// show FPS?
 		config_get_bool(s_core_config, "sf2000_show_fps", &g_show_fps);
 
+		config_get_bool(s_core_config, "sf2000_per_state_srm", &g_per_state_srm);
+
 		fps_counter_enable(g_show_fps);
 
 		// make sure the first two controllers are configured as gamepads
 		retro_set_controller_port_device(0, RETRO_DEVICE_JOYPAD);
 		retro_set_controller_port_device(1, RETRO_DEVICE_JOYPAD);
+
+		load_srm(0);
 	}
 
 	return ret;
@@ -446,7 +509,7 @@ void log_cb(enum retro_log_level level, const char *fmt, ...)
 }
 
 
-void build_state_filepath(char *state_filepath, size_t size, const char *game_filepath, const char *frontend_state_filepath)
+char build_state_filepath(char *state_filepath, size_t size, const char *game_filepath, const char *frontend_state_filepath)
 {
 //	"/mnt/sda1/ROMS/pce/Alien Crush.pce"	->
 //	"/mnt/sda1/ROMS/save/Alien Crush.state[slot]"
@@ -457,18 +520,16 @@ void build_state_filepath(char *state_filepath, size_t size, const char *game_fi
 	if (strlen(frontend_state_filepath) == 0) { 
 		save_slot = slot_state + '0'; //To convert integer to char only 0 to 9 will be converted. 
 	}
-
-	char basename[MAXPATH];
-	fill_pathname_base(basename, game_filepath, sizeof(basename));
-	path_remove_extension(basename);
-
-	snprintf(state_filepath, size, SAVE_DIRECTORY "/%s.state%c", basename, save_slot);
+	char ext[7];
+	snprintf(ext, 7, "state%c", save_slot);
+	build_rom_filepath(state_filepath, size, game_filepath, ext, 6);
+	return save_slot;
 }
 
 int state_load(const char *frontend_state_filepath)
 {
 	char state_filepath[MAXPATH];
-	build_state_filepath(state_filepath, sizeof(state_filepath), s_game_filepath, frontend_state_filepath);
+	char slot = build_state_filepath(state_filepath, sizeof(state_filepath), s_game_filepath, frontend_state_filepath);
 	xlog("state_load: file=%s\n", state_filepath);
 
 	FILE *file = fopen(state_filepath, "rb");
@@ -488,13 +549,16 @@ int state_load(const char *frontend_state_filepath)
 
 	free(data);
 
+	if(g_per_state_srm){
+		load_srm(slot);
+	}
 	return 1;
 }
 
 int state_save(const char *frontend_state_filepath)
 {
 	char state_filepath[MAXPATH];
-	build_state_filepath(state_filepath, sizeof(state_filepath), s_game_filepath, frontend_state_filepath);
+	char slot = build_state_filepath(state_filepath, sizeof(state_filepath), s_game_filepath, frontend_state_filepath);
 	xlog("state_save: file=%s\n", state_filepath);
 
 	FILE *file = fopen(state_filepath, "wb");
@@ -513,6 +577,9 @@ int state_save(const char *frontend_state_filepath)
 
 	fs_sync(state_filepath);
 
+	if(g_per_state_srm){
+		save_srm(slot);
+	}
 	return 1;
 }
 
