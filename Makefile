@@ -8,7 +8,6 @@ DEBUG_XLOG = 1
 # Enable on-screen debug output
 DEBUG_ON_SCREEN = 0
 
-SMALL_MESSAGE = 0
 # tweaks for the release build
 #ALPHARELEASE = 0.10
 
@@ -38,8 +37,8 @@ endif
 ifeq ($(DEBUG_ON_SCREEN), 1)
 CFLAGS += -DDEBUG_ON_SCREEN=1
 endif
-ifeq ($(SMALL_MESSAGE), 0)
-CFLAGS += -DSMALL_MESSAGE
+ifeq ($(CONSOLE), spec)
+CFLAGS += -DSMALL_MESSAGE=1
 endif
 
 LDFLAGS := -EL -nostdlib -z max-page-size=32
