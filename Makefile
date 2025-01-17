@@ -37,6 +37,8 @@ endif
 ifeq ($(DEBUG_ON_SCREEN), 1)
 CFLAGS += -DDEBUG_ON_SCREEN=1
 endif
+
+# comment if to compile Fuse core, if not work 
 ifeq ($(CONSOLE), spec)
 CFLAGS += -DSMALL_MESSAGE=1
 endif

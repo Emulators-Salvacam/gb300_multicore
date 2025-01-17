@@ -13,6 +13,10 @@
 #include "stockfw.h"
 #include "video_sf2000.h"
 
+#define HOTKEYLOAD 0x9800 // press L + R + Y
+#define HOTKEYSAVE 0x9400 // press L + R + X
+#define HOTKEYINCREASESTATE 0x9020 //press L + R + Right
+#define HOTKEYDECREASESTATE 0x9080 // press L + R + LEFT
 #define MAXPATH 	255
 #define SYSTEM_DIRECTORY	"/mnt/sda1/bios"
 #define SAVE_DIRECTORY		"/mnt/sda1/ROMS/save"
@@ -94,28 +98,24 @@ struct retro_core_t core_exports = {
    .retro_get_memory_size = retro_get_memory_size,
 };
 
-void build_rom_filepath(
-	char *filepath, size_t size,
-	const char *game_filepath,
-	const char *extension,
-	size_t extension_size)
-{
-	char temp[size];
-	strncpy(temp, game_filepath, size);
-	temp[size-(2 + extension_size)]=0;
-	char * p = strrchr(temp, '.');
-	if(p) *p = 0;
-	snprintf(filepath, size, "%s.%s", temp, extension);
+void build_srm_filepath(char *filepath, size_t size, const char *game_filepath, const char *extension, size_t extension_size) {
+	char basename[MAXPATH];
+	fill_pathname_base(basename, game_filepath, sizeof(basename));
+	path_remove_extension(basename);
+	struct retro_system_info sysinfo;
+	retro_get_system_info(&sysinfo);
+	snprintf(filepath, size, "%s/%s/%s.%s", SAVE_DIRECTORY, sysinfo.library_name, basename, extension);
 }
 
 void save_srm(const char slot){
 	char ram_filepath[MAXPATH];
 	char ext[5];
 	snprintf(ext, 5, "srm%c", slot);
-	build_rom_filepath(ram_filepath, sizeof(ram_filepath), s_game_filepath, ext, 4);
+	build_srm_filepath(ram_filepath, sizeof(ram_filepath), s_game_filepath, ext, 4);
 	size_t save_size = retro_get_memory_size(RETRO_MEMORY_SAVE_RAM);
 	if(save_size == 0)
 		return;
+	xlog("save_srm: file=%s\n", ram_filepath);
 	FILE *ram_file = fopen(ram_filepath, "wb");
 	if (!ram_file)
 		return;
@@ -129,10 +129,11 @@ void load_srm(const char slot){
 	char ram_filepath[MAXPATH];
 	char ext[5];
 	snprintf(ext, 5, "srm%c", slot);
-	build_rom_filepath(ram_filepath, sizeof(ram_filepath), s_game_filepath, ext, 4);
+	build_srm_filepath(ram_filepath, sizeof(ram_filepath), s_game_filepath, ext, 4);
 	FILE *ram_file = fopen(ram_filepath, "rb");
 	if (!ram_file)
 		return;
+	xlog("load_srm: file=%s\n", ram_filepath);
 	fseeko(ram_file, 0, SEEK_END);
 	size_t ram_file_size = ftell(ram_file);
 	fseeko(ram_file, 0, SEEK_SET);
@@ -302,9 +303,10 @@ bool wrap_retro_load_game(const struct retro_game_info* info)
 		// show FPS?
 		config_get_bool(s_core_config, "sf2000_show_fps", &g_show_fps);
 
-		config_get_bool(s_core_config, "sf2000_per_state_srm", &g_per_state_srm);
-
 		fps_counter_enable(g_show_fps);
+
+		// per state srm?
+		config_get_bool(s_core_config, "sf2000_per_state_srm", &g_per_state_srm);
 
 		// make sure the first two controllers are configured as gamepads
 		retro_set_controller_port_device(0, RETRO_DEVICE_JOYPAD);
@@ -327,15 +329,13 @@ void wrap_retro_run(void) {
 			*fw_fps_counter_enable = 0;
 			gb_temporary_osd = false;
 		}
-	//} else if (g_joy_task_state == 0x9800 || g_joy_task_state == 0x9400 
-		//|| g_joy_task_state == 0x9020 || g_joy_task_state == 0x9080) { 
-	} else if (g_joy_task_state == 0x9800 || g_joy_task_state == 0x9400 
-		|| g_joy_task_state == 0x9020 || g_joy_task_state == 0x9080) { 
+	} else if (g_joy_task_state == HOTKEYLOAD || g_joy_task_state == HOTKEYSAVE 
+		|| g_joy_task_state == HOTKEYINCREASESTATE || g_joy_task_state == HOTKEYDECREASESTATE) { 
 		
 		// Show osd message
 		gb_temporary_osd = true;
 		g_osd_time = os_get_tick_count();
-		if (g_joy_task_state == 0x9800) { // press L + R + Y	
+		if (g_joy_task_state == HOTKEYLOAD) { 	
 			*fw_fps_counter_enable = 1;
 
 			#if SMALL_MESSAGE == 1
@@ -343,17 +343,17 @@ void wrap_retro_run(void) {
 			#else
 			sprintf(fw_fps_counter_format, "Load %d", slot_state);
 			#endif
-			state_load("");
-		} else if (g_joy_task_state == 0x9400) { // press L + R + X	
+			gfn_state_load("");
+		} else if (g_joy_task_state == HOTKEYSAVE) { 	
 			*fw_fps_counter_enable = 1;
 			#if SMALL_MESSAGE == 1
 			sprintf(fw_fps_counter_format, "s%d", slot_state);
 			#else
 			sprintf(fw_fps_counter_format, "Save %d", slot_state);
 			#endif
-			state_save("");
-		} else if (g_joy_task_state == 0x9020) { //press L + R + Right	
-			if (slot_state < 9) {
+			gfn_state_save("");
+		} else if (g_joy_task_state == HOTKEYINCREASESTATE) { 	
+			if (slot_state < 3) {
 				slot_state += 1;
 			}
 			*fw_fps_counter_enable = 1;
@@ -362,7 +362,7 @@ void wrap_retro_run(void) {
 			#else
 			sprintf(fw_fps_counter_format, "Slot %d", slot_state);
 			#endif
-		} else if (g_joy_task_state == 0x9080) { // press L + R + Left	
+		} else if (g_joy_task_state == HOTKEYDECREASESTATE) { 	
 			if (slot_state > 0) {
 				slot_state -= 1;
 			}
@@ -512,7 +512,9 @@ void log_cb(enum retro_log_level level, const char *fmt, ...)
 char build_state_filepath(char *state_filepath, size_t size, const char *game_filepath, const char *frontend_state_filepath)
 {
 //	"/mnt/sda1/ROMS/pce/Alien Crush.pce"	->
-//	"/mnt/sda1/ROMS/save/Alien Crush.state[slot]"
+//	"/mnt/sda1/ROMS/save/[core]/Alien Crush.state[slot]"
+	struct retro_system_info sysinfo;
+	retro_get_system_info(&sysinfo);
 
 	// last char is the save slot number
 	char save_slot = frontend_state_filepath[strlen(frontend_state_filepath) - 1];
@@ -520,9 +522,11 @@ char build_state_filepath(char *state_filepath, size_t size, const char *game_fi
 	if (strlen(frontend_state_filepath) == 0) { 
 		save_slot = slot_state + '0'; //To convert integer to char only 0 to 9 will be converted. 
 	}
-	char ext[7];
-	snprintf(ext, 7, "state%c", save_slot);
-	build_rom_filepath(state_filepath, size, game_filepath, ext, 6);
+
+	char basename[MAXPATH];
+	fill_pathname_base(basename, game_filepath, sizeof(basename));
+	path_remove_extension(basename);
+	snprintf(state_filepath, size, "%s/%s/%s.state%c", SAVE_DIRECTORY, sysinfo.library_name, basename, save_slot);
 	return save_slot;
 }
 
@@ -588,8 +592,8 @@ void build_game_config_filepath(char *filepath, size_t size, const char *game_fi
 	char basename[MAXPATH];
 	fill_pathname_base(basename, game_filepath, sizeof(basename));
 	path_remove_extension(basename);
-
-	snprintf(filepath, size, CONFIG_DIRECTORY "/%s/%s.opt",library_name, basename);
+	
+	snprintf(filepath, size, "%s/%s/%s.opt", CONFIG_DIRECTORY, library_name, basename);
 }
 
 void build_core_config_filepath(char *filepath, size_t size)
@@ -597,7 +601,7 @@ void build_core_config_filepath(char *filepath, size_t size)
 	struct retro_system_info sysinfo;
 	retro_get_system_info(&sysinfo);
 
-	snprintf(filepath, size, CONFIG_DIRECTORY "/%s.opt", sysinfo.library_name);
+	snprintf(filepath, size, "%s/%s.opt", CONFIG_DIRECTORY, sysinfo.library_name, sysinfo.library_name);
 }
 
 void config_add_file(const char *filepath)
