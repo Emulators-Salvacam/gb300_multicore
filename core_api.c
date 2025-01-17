@@ -343,7 +343,7 @@ void wrap_retro_run(void) {
 			#else
 			sprintf(fw_fps_counter_format, "Load %d", slot_state);
 			#endif
-			gfn_state_load("");
+			state_load("");
 		} else if (g_joy_task_state == HOTKEYSAVE) { 	
 			*fw_fps_counter_enable = 1;
 			#if SMALL_MESSAGE == 1
@@ -351,7 +351,7 @@ void wrap_retro_run(void) {
 			#else
 			sprintf(fw_fps_counter_format, "Save %d", slot_state);
 			#endif
-			gfn_state_save("");
+			state_save("");
 		} else if (g_joy_task_state == HOTKEYINCREASESTATE) { 	
 			if (slot_state < 3) {
 				slot_state += 1;
@@ -372,7 +372,10 @@ void wrap_retro_run(void) {
 			#else
 			sprintf(fw_fps_counter_format, "Slot %d", slot_state);
 			#endif
-		}	
+		}
+
+		//Reset g_joy_state for not press buttons
+		g_joy_state = 0x0000;
 	} 
 
 	retro_run();

@@ -80,6 +80,7 @@ g_run_file_size	= 0x806f8e9c;
 gp_buf_64m	= 0x806f9020;
 
 g_joy_task_state = 0x806f8fa0;
+g_joy_state = 0x806f900c;
 
 /* HiChip's hardware wired to LCD for UARTless debug.c */
 PINMUXL	= 0xb88004a0;
