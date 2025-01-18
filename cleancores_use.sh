@@ -11,5 +11,6 @@ make clean CONSOLE=sega       CORE=cores/picodrive MAKEFILE=-fMakefile.libretro 
 make clean CONSOLE=zx81       CORE=cores/libretro-81 && \
 make clean CONSOLE=spec       CORE=cores/libretro-fuse && \
 make clean CONSOLE=gba        CORE=cores/gpsp && \
+#make clean CONSOLE=m2k		  CORE=cores/mame2000 && \
 
 true

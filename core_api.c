@@ -323,6 +323,7 @@ static int slot_state = 0;
 
 void wrap_retro_run(void) {
 
+	#if HOTKEY_SAVE_LOAD == 1
 	// Disable the osd message after 2 seconds
 	if (gb_temporary_osd) {
 		if (os_get_tick_count() - g_osd_time > 1000) {
@@ -377,7 +378,8 @@ void wrap_retro_run(void) {
 		//Reset g_joy_state for not press buttons
 		g_joy_state = 0x0000;
 	} 
-
+	#endif
+	
 	retro_run();
 }
 
