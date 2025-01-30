@@ -14,5 +14,6 @@ make CONSOLE=nesq       CORE=cores/QuickNES_Core && \
 make CONSOLE=sega       CORE=cores/picodrive MAKEFILE=-fMakefile.libretro && \
 make CONSOLE=zx81       CORE=cores/libretro-81 && \
 #make CONSOLE=m2k		CORE=cores/mame2000 && \
+#make CONSOLE=cps1       CORE=cores/fbalpha2012_cps1 && \
 
 true
