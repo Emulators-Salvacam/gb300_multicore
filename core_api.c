@@ -62,9 +62,9 @@ static bool g_per_state_srm = false;
 
 static void dummy_retro_run(void);
 
-static int *fw_fps_counter_enable = 0x806f7698;
-static int *fw_fps_counter = 0x806f7694;
-static char *fw_fps_counter_format = 0x806674a0;	// "%2d/%2d"
+static int *fw_fps_counter_enable = 0x80c5abcc;	// displayfps
+static int *fw_fps_counter = 0x80c5abc8;
+static char *fw_fps_counter_format = 0x809fb9ec;
 static void fps_counter_enable(bool enable);
 
 
@@ -205,8 +205,8 @@ struct retro_core_t *__core_entry__(void)
 {
 	// https://gitlab.com/kobily/sf2000_multicore/-/commit/328bce4173316a6ea0afe4c360ee4f3d5b951c19 condensed to core's side
 	os_disable_interrupt();
-	*(unsigned *)0x80049744 = 0x3c1c8070; // lui$gp, 0x8070
-	*(unsigned *)0x80049748 = 0x279cd798; // addiu$gp, 0xd798
+	*(unsigned *)0x80049744 = *(unsigned *)0x80001270; // lui	$gp
+	*(unsigned *)0x80049748 = *(unsigned *)0x80001274; // addiu	$gp
 	__builtin___clear_cache((void *)0x80049744, (void *)0x8004974c);
 	os_enable_interrupt();
 	clear_bss();
@@ -338,7 +338,6 @@ void wrap_retro_run(void) {
 		g_osd_time = os_get_tick_count();
 		if (g_joy_task_state == HOTKEYLOAD) { 	
 			*fw_fps_counter_enable = 1;
-
 			#if SMALL_MESSAGE == 1
 			sprintf(fw_fps_counter_format, "l%d", slot_state);
 			#else
@@ -374,9 +373,8 @@ void wrap_retro_run(void) {
 			sprintf(fw_fps_counter_format, "Slot %d", slot_state);
 			#endif
 		}
-
-		//Reset g_joy_state for not press buttons
-		g_joy_state = 0x0000;
+		//Reset g_joy_task_state for not press buttons
+		g_joy_task_state = 0;
 	} 
 	#endif
 	
