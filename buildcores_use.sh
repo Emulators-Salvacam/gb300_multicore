@@ -13,6 +13,7 @@ make CONSOLE=nes        CORE=cores/libretro-fceumm && \
 make CONSOLE=nesq       CORE=cores/QuickNES_Core && \
 make CONSOLE=sega       CORE=cores/picodrive MAKEFILE=-fMakefile.libretro && \
 make CONSOLE=zx81       CORE=cores/libretro-81 && \
+make CONSOLE=snes       CORE=cores/snes9x2005 && \
 #make CONSOLE=m2k		CORE=cores/mame2000 && \
 
 true
