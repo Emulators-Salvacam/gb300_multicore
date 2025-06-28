@@ -7,8 +7,6 @@ CLEAR_LOG_ON_BOOT = 0
 DEBUG_XLOG = 1
 # Enable on-screen debug output
 DEBUG_ON_SCREEN = 0
-# Enable hotkey for save and load
-HOTKEY_SAVE_LOAD = 1
 
 # tweaks for the release build
 #ALPHARELEASE = 0.10
@@ -38,13 +36,6 @@ CFLAGS += -DDEBUG_XLOG=1
 endif
 ifeq ($(DEBUG_ON_SCREEN), 1)
 CFLAGS += -DDEBUG_ON_SCREEN=1
-endif
-
-ifeq ($(HOTKEY_SAVE_LOAD), 1)
-CFLAGS += -DHOTKEY_SAVE_LOAD=1
-ifeq ($(CONSOLE), spec)
-CFLAGS += -DSMALL_MESSAGE=1
-endif
 endif
 
 LDFLAGS := -EL -nostdlib -z max-page-size=32
