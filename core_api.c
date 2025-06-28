@@ -13,10 +13,12 @@
 #include "stockfw.h"
 #include "video_sf2000.h"
 
-#define HOTKEYLOAD 0x9800 // press L + R + Y
-#define HOTKEYSAVE 0x9400 // press L + R + X
+#define HOTKEYSAVESRM 0x9008 // press L + R + Start
+#define HOTKEYSAVESTATE 0x9400 // press L + R + X
+#define HOTKEYLOADSTATE 0x9800 // press L + R + Y
 #define HOTKEYINCREASESTATE 0x9020 //press L + R + Right
 #define HOTKEYDECREASESTATE 0x9080 // press L + R + LEFT
+
 #define MAXPATH 	255
 #define SYSTEM_DIRECTORY	"/mnt/sda1/bios"
 #define SAVE_DIRECTORY		"/mnt/sda1/ROMS/save"
@@ -38,8 +40,8 @@ static void mono_mix_audio_sample_cb(int16_t left, int16_t right);
 static bool wrap_retro_load_game(const struct retro_game_info* info);
 static void wrap_retro_init(void);
 static void wrap_retro_deinit(void);
-static void wrap_retro_run(void);
 static void wrap_retro_unload_game(void);
+static void wrap_retro_run(void);
 
 static void log_cb(enum retro_log_level level, const char *fmt, ...);
 
@@ -59,12 +61,17 @@ static int16_t wrap_input_state_cb(unsigned port, unsigned device, unsigned inde
 static bool g_show_fps = false;
 static void frameskip_cb(BOOL flag);
 static bool g_per_state_srm = false;
+static bool g_enable_savestate_hotkeys = true;
+static bool g_enable_save_srm_hotkey = true;
+static bool g_enable_osd = true;
+static bool g_osd_small_messages = false;
+
 
 static void dummy_retro_run(void);
 
-static int *fw_fps_counter_enable = 0x806f7698;
-static int *fw_fps_counter = 0x806f7694;
-static char *fw_fps_counter_format = 0x806674a0;	// "%2d/%2d"
+static int *fw_fps_counter_enable = 0x80c5abcc;	// displayfps
+static int *fw_fps_counter = 0x80c5abc8;
+static char *fw_fps_counter_format = 0x809fb9ec;
 static void fps_counter_enable(bool enable);
 
 
@@ -205,8 +212,8 @@ struct retro_core_t *__core_entry__(void)
 {
 	// https://gitlab.com/kobily/sf2000_multicore/-/commit/328bce4173316a6ea0afe4c360ee4f3d5b951c19 condensed to core's side
 	os_disable_interrupt();
-	*(unsigned *)0x80049744 = 0x3c1c8070; // lui$gp, 0x8070
-	*(unsigned *)0x80049748 = 0x279cd798; // addiu$gp, 0xd798
+	*(unsigned *)0x80049744 = *(unsigned *)0x80001270; // lui	$gp
+	*(unsigned *)0x80049748 = *(unsigned *)0x80001274; // addiu	$gp
 	__builtin___clear_cache((void *)0x80049744, (void *)0x8004974c);
 	os_enable_interrupt();
 	clear_bss();
@@ -302,11 +309,16 @@ bool wrap_retro_load_game(const struct retro_game_info* info)
 
 		// show FPS?
 		config_get_bool(s_core_config, "sf2000_show_fps", &g_show_fps);
-
 		fps_counter_enable(g_show_fps);
 
 		// per state srm?
 		config_get_bool(s_core_config, "sf2000_per_state_srm", &g_per_state_srm);
+
+		// Hotkey settings
+		config_get_bool(s_core_config, "sf2000_enable_savestate_hotkeys", &g_enable_savestate_hotkeys);
+		//config_get_bool(s_core_config, "sf2000_enable_save_srm_hotkey", &g_enable_save_srm_hotkey);
+		config_get_bool(s_core_config, "sf2000_enable_osd", &g_enable_osd);
+		config_get_bool(s_core_config, "sf2000_osd_small_messages", &g_osd_small_messages);
 
 		// make sure the first two controllers are configured as gamepads
 		retro_set_controller_port_device(0, RETRO_DEVICE_JOYPAD);
@@ -319,66 +331,59 @@ bool wrap_retro_load_game(const struct retro_game_info* info)
 }
 
 static uint32_t g_osd_time = 0;
+static uint32_t slot_delay_time = 0;
 static int slot_state = 0;
+char osd_message[MAXPATH];
+
+// Show osd message
+int show_osd_message(const char *message) {
+	if (g_enable_osd) {
+		gb_temporary_osd = true;
+		if (!g_show_fps) *fw_fps_counter_enable = 1;
+		sprintf(fw_fps_counter_format, message);
+		g_osd_time = os_get_tick_count();
+	}
+}
 
 void wrap_retro_run(void) {
 
-	#if HOTKEY_SAVE_LOAD == 1
 	// Disable the osd message after 2 seconds
 	if (gb_temporary_osd) {
 		if (os_get_tick_count() - g_osd_time > 1000) {
-			*fw_fps_counter_enable = 0;
+			if (!g_show_fps) *fw_fps_counter_enable = 0;
 			gb_temporary_osd = false;
 		}
-	} else if (g_joy_task_state == HOTKEYLOAD || g_joy_task_state == HOTKEYSAVE 
-		|| g_joy_task_state == HOTKEYINCREASESTATE || g_joy_task_state == HOTKEYDECREASESTATE) { 
-		
-		// Show osd message
-		gb_temporary_osd = true;
-		g_osd_time = os_get_tick_count();
-		if (g_joy_task_state == HOTKEYLOAD) { 	
-			*fw_fps_counter_enable = 1;
-
-			#if SMALL_MESSAGE == 1
-			sprintf(fw_fps_counter_format, "l%d", slot_state);
-			#else
-			sprintf(fw_fps_counter_format, "Load %d", slot_state);
-			#endif
-			state_load("");
-		} else if (g_joy_task_state == HOTKEYSAVE) { 	
-			*fw_fps_counter_enable = 1;
-			#if SMALL_MESSAGE == 1
-			sprintf(fw_fps_counter_format, "s%d", slot_state);
-			#else
-			sprintf(fw_fps_counter_format, "Save %d", slot_state);
-			#endif
-			state_save("");
-		} else if (g_joy_task_state == HOTKEYINCREASESTATE) { 	
-			if (slot_state < 3) {
+	} else if ((g_joy_task_state == HOTKEYSAVESRM)) { // && (g_enable_save_srm_hotkey)) { 	
+		save_srm(0);
+		g_osd_small_messages ? sprintf(osd_message, "S:SRM") : sprintf(osd_message, "Save: SRM");
+		show_osd_message(osd_message);
+	} else if ((g_joy_task_state == HOTKEYSAVESTATE) && (g_enable_savestate_hotkeys)) {
+		state_save("");
+		g_osd_small_messages ? sprintf(osd_message, "S:%d", slot_state) : sprintf(osd_message, "Save: %d", slot_state);
+		show_osd_message(osd_message);
+	} else if ((g_joy_task_state == HOTKEYLOADSTATE) && (g_enable_savestate_hotkeys)) { 	
+		state_load("");
+		g_osd_small_messages ? sprintf(osd_message, "L:%d", slot_state) : sprintf(osd_message, "Load: %d", slot_state);
+		show_osd_message(osd_message);
+	}
+	if (((g_joy_task_state == HOTKEYINCREASESTATE || g_joy_task_state == HOTKEYDECREASESTATE) && (os_get_tick_count() - slot_delay_time > 250)) && (g_enable_savestate_hotkeys)) { // Delay so it isn't too fast 
+		if (g_joy_task_state == HOTKEYINCREASESTATE) { 	
+			if (slot_state < 9) {
 				slot_state += 1;
+			} else {
+				slot_state = 0;
 			}
-			*fw_fps_counter_enable = 1;
-			#if SMALL_MESSAGE == 1
-			sprintf(fw_fps_counter_format, "t%d", slot_state);
-			#else
-			sprintf(fw_fps_counter_format, "Slot %d", slot_state);
-			#endif
 		} else if (g_joy_task_state == HOTKEYDECREASESTATE) { 	
 			if (slot_state > 0) {
 				slot_state -= 1;
+			} else {
+				slot_state = 9;
 			}
-			*fw_fps_counter_enable = 1;
-			#if SMALL_MESSAGE == 1
-			sprintf(fw_fps_counter_format, "t%d", slot_state);
-			#else
-			sprintf(fw_fps_counter_format, "Slot %d", slot_state);
-			#endif
 		}
-
-		//Reset g_joy_state for not press buttons
-		g_joy_state = 0x0000;
+		g_osd_small_messages ? sprintf(osd_message, "SLT:%d", slot_state) : sprintf(osd_message, "Slot: %d", slot_state);
+		show_osd_message(osd_message);
+		slot_delay_time = os_get_tick_count();
 	} 
-	#endif
 	
 	retro_run();
 }

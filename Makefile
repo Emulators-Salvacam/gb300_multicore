@@ -7,8 +7,6 @@ CLEAR_LOG_ON_BOOT = 0
 DEBUG_XLOG = 1
 # Enable on-screen debug output
 DEBUG_ON_SCREEN = 0
-# Enable hotkey for save and load
-HOTKEY_SAVE_LOAD = 1
 
 # tweaks for the release build
 #ALPHARELEASE = 0.10
@@ -38,13 +36,6 @@ CFLAGS += -DDEBUG_XLOG=1
 endif
 ifeq ($(DEBUG_ON_SCREEN), 1)
 CFLAGS += -DDEBUG_ON_SCREEN=1
-endif
-
-ifeq ($(HOTKEY_SAVE_LOAD), 1)
-CFLAGS += -DHOTKEY_SAVE_LOAD=1
-ifeq ($(CONSOLE), spec)
-CFLAGS += -DSMALL_MESSAGE=1
-endif
 endif
 
 LDFLAGS := -EL -nostdlib -z max-page-size=32
@@ -184,12 +175,15 @@ bisrv.asd: loader.bin lcd_font.bin crc
 
 	# note: this patch must match $(LOADER_ADDR)
 	# jal run_gba -> jal 0x80001500
-	printf "\x40\x05\x00\x0C" | dd of=bisrv.asd bs=1 seek=$$((0x30f0bc)) conv=notrunc
+	printf "\x40\x05\x00\x0C" | dd of=bisrv.asd bs=1 seek=$$((0x35ee10)) conv=notrunc
 
 	# endless loop in sys_watchdog_reboot -> j 0x80001508
 	printf "\x42\x05\x00\x08" | dd of=bisrv.asd bs=1 seek=$$((0x30d4)) conv=notrunc
 	# endless loop in INT_General_Exception_Hdlr -> j 0x80001510
 	printf "\x44\x05\x00\x08" | dd of=bisrv.asd bs=1 seek=$$((0x495a0)) conv=notrunc
+	# patch the buffer size for handling the save state snapshot image
+	# \x0c (768k) would be enough up to cores displaying at 640x480x2
+	printf "\x0c" | dd of=bisrv.asd bs=1 seek=$$((0x354214)) conv=notrunc
 
 	$(Q)./crc bisrv.asd
 
