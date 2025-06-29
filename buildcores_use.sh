@@ -1,9 +1,7 @@
 #!/bin/bash
 
 #fully working
-#make clean CONSOLE=spec   CORE=cores/libretro-fuse && \
-make CONSOLE=spec 		  CORE=cores/libretro-fuse && \
-#make clean CONSOLE=chip8  CORE=cores/jaxe MAKEFILE=-fMakefile.libretro && \
+#make CONSOLE=spec 		  CORE=cores/libretro-fuse && \
 #make CONSOLE=chip8      CORE=cores/jaxe MAKEFILE=-fMakefile.libretro && \
 #make CONSOLE=gb        	CORE=cores/libretro-gambatte && \
 #make CONSOLE=wolf3d     CORE=cores/ecwolf/src/libretro && \
@@ -16,5 +14,6 @@ make CONSOLE=spec 		  CORE=cores/libretro-fuse && \
 #make CONSOLE=snes       CORE=cores/snes9x2005 && \
 #make CONSOLE=m2k		CORE=cores/mame2000 && \
 #make CONSOLE=cps1       CORE=cores/fbalpha2012_cps1 && \
+make CONSOLE=js       CORE=cores/js2000 && \
 
 true
