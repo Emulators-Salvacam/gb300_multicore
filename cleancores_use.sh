@@ -12,7 +12,7 @@ make clean CONSOLE=zx81       CORE=cores/libretro-81 && \
 make clean CONSOLE=spec       CORE=cores/libretro-fuse && \
 make clean CONSOLE=gba        CORE=cores/gpsp && \
 make clean CONSOLE=snes       CORE=cores/snes9x2005 && \
-make clean CONSOLE=m2k		  CORE=cores/mame2000 && \
+#make clean CONSOLE=m2k		  CORE=cores/mame2000 && \
 #make clean CONSOLE=cps1       CORE=cores/fbalpha2012_cps1 && \
 make clean CONSOLE=js       CORE=cores/js2000 && \
 
