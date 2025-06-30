@@ -140,10 +140,7 @@ void save_srm(const char slot){
 	char ram_filepath[MAXPATH];
 	char ext[5];
 	snprintf(ext, 5, "srm%c", slot);
-	
-	char directory[MAXPATH] = SAVE_DIRECTORY;
-	create_dir(directory); // Make sure SAVE_DIRECTORY exists
-
+	check_dir();
 	build_srm_filepath(ram_filepath, sizeof(ram_filepath), s_game_filepath, ext, 4);
 	size_t save_size = retro_get_memory_size(RETRO_MEMORY_SAVE_RAM);
 	if(save_size == 0)
