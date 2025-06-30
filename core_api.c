@@ -105,6 +105,28 @@ struct retro_core_t core_exports = {
    .retro_get_memory_size = retro_get_memory_size,
 };
 
+// Make a directory if it doesn't exist
+int create_dir(const char *path) {
+	if (fs_access(path, 0) != 0) {
+		fs_mkdir(path, 0755);
+		xlog("filepath: creating %s\n", path);
+   }
+}
+
+void check_dir()
+{
+	struct retro_system_info sysinfo;
+	retro_get_system_info(&sysinfo);
+
+	char directory[MAXPATH] = SAVE_DIRECTORY;
+
+	create_dir(directory); // Make sure SAVE_DIRECTORY exists
+	strcat(directory, "/");
+	strcat(directory, sysinfo.library_name);
+
+	create_dir(directory); // Make sure SAVE_DIRECTORY/sysinfo.library_name exists
+}
+
 void build_srm_filepath(char *filepath, size_t size, const char *game_filepath, const char *extension, size_t extension_size) {
 	char basename[MAXPATH];
 	fill_pathname_base(basename, game_filepath, sizeof(basename));
@@ -118,6 +140,10 @@ void save_srm(const char slot){
 	char ram_filepath[MAXPATH];
 	char ext[5];
 	snprintf(ext, 5, "srm%c", slot);
+	
+	char directory[MAXPATH] = SAVE_DIRECTORY;
+	create_dir(directory); // Make sure SAVE_DIRECTORY exists
+
 	build_srm_filepath(ram_filepath, sizeof(ram_filepath), s_game_filepath, ext, 4);
 	size_t save_size = retro_get_memory_size(RETRO_MEMORY_SAVE_RAM);
 	if(save_size == 0)
@@ -518,7 +544,6 @@ void log_cb(enum retro_log_level level, const char *fmt, ...)
 #endif
 }
 
-
 char build_state_filepath(char *state_filepath, size_t size, const char *game_filepath, const char *frontend_state_filepath)
 {
 //	"/mnt/sda1/ROMS/pce/Alien Crush.pce"	->
@@ -573,6 +598,7 @@ int state_save(const char *frontend_state_filepath)
 {
 	char state_filepath[MAXPATH];
 	char slot = build_state_filepath(state_filepath, sizeof(state_filepath), s_game_filepath, frontend_state_filepath);
+	check_dir();
 	xlog("state_save: file=%s\n", state_filepath);
 
 	FILE *file = fopen(state_filepath, "wb");
