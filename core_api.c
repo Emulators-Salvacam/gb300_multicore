@@ -380,10 +380,14 @@ void wrap_retro_run(void) {
 			state_save("");
 			g_osd_small_messages ? sprintf(osd_message, "S:%d", slot_state) : sprintf(osd_message, "Save: %d", slot_state);
 			show_osd_message(osd_message);
+			//Reset g_joy_state for not press buttons
+			g_joy_state = 0x0000;
 		} else if (g_joy_task_state == HOTKEYLOADSTATE) { 	
 			state_load("");
 			g_osd_small_messages ? sprintf(osd_message, "L:%d", slot_state) : sprintf(osd_message, "Load: %d", slot_state);
 			show_osd_message(osd_message);
+			//Reset g_joy_state for not press buttons
+			g_joy_state = 0x0000;
 		}
 		if ((g_joy_task_state == HOTKEYINCREASESTATE || g_joy_task_state == HOTKEYDECREASESTATE) 
 				&& (os_get_tick_count() - slot_delay_time > DELAYTIMECHANGESLOT)) { 
@@ -403,6 +407,8 @@ void wrap_retro_run(void) {
 			g_osd_small_messages ? sprintf(osd_message, "s:%d", slot_state) : sprintf(osd_message, "Slot: %d", slot_state);
 			show_osd_message(osd_message);
 			slot_delay_time = os_get_tick_count();
+			//Reset g_joy_state for not press buttons
+			g_joy_state = 0x0000;
 		} 
 	}
 	
