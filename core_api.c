@@ -66,6 +66,7 @@ static bool g_enable_osd = true;
 static bool g_osd_small_messages = false;
 static bool g_continuous_slot_change = true;
 
+static bool g_opt_per_game = false;
 static bool g_create_opt_per_game = false;
 
 static void dummy_retro_run(void);
@@ -288,28 +289,32 @@ bool wrap_retro_load_game(const struct retro_game_info* info)
 	char config_game_filepath[MAXPATH];
 	build_game_config_filepath(config_game_filepath, sizeof(config_game_filepath), s_game_filepath,sysinfo.library_name);
 
-	config_get_bool(s_core_config, "sf2000_create_opt_per_game", &g_create_opt_per_game);
-	if (g_create_opt_per_game) {
-   	if (fs_access(config_game_filepath, 0) != 0) {
-			char config_core_path[MAXPATH] = CONFIG_DIRECTORY;
-			strcat(config_core_path, "/");
-			strcat(config_core_path, sysinfo.library_name);
-			strcat(config_core_path, ".opt");
+	config_get_bool(s_core_config, "sf2000_opt_per_game", &g_opt_per_game);
 
-			char directory_config[MAXPATH] = CONFIG_DIRECTORY;
-			strcat(directory_config, "/");
-			strcat(directory_config, sysinfo.library_name);
-			create_dir(directory_config); // Make sure CONFIG_DIRECTORY/sysinfo.library_name exists
+	if (g_opt_per_game) {
+		config_get_bool(s_core_config, "sf2000_create_opt_per_game", &g_create_opt_per_game);
+		if (g_create_opt_per_game) {
+	   		if (fs_access(config_game_filepath, 0) != 0) {
+				char config_core_path[MAXPATH] = CONFIG_DIRECTORY;
+				strcat(config_core_path, "/");
+				strcat(config_core_path, sysinfo.library_name);
+				strcat(config_core_path, ".opt");
 
-	    if (copy_file(config_core_path, config_game_filepath) == 0) {
-				xlog("filepath: creating %s\n", config_game_filepath);
-	    }
-  	}
+				char directory_config[MAXPATH] = CONFIG_DIRECTORY;
+				strcat(directory_config, "/");
+				strcat(directory_config, sysinfo.library_name);
+				create_dir(directory_config); // Make sure CONFIG_DIRECTORY/sysinfo.library_name exists
+
+			    if (copy_file(config_core_path, config_game_filepath) == 0) {
+						xlog("filepath: creating %s\n", config_game_filepath);
+			    }
+	  		}
+		}
+
+		// load per game options
+		config_add_file(config_game_filepath);
 	}
-
-	// load per game options
-	config_add_file(config_game_filepath);
-
+	
 	// setup load/save state handlers
 	gfn_state_load = state_load;
 	gfn_state_save = state_save;
