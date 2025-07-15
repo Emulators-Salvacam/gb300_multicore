@@ -182,7 +182,7 @@ void load_srm(const char slot){
 
 void wrap_retro_unload_game(void){
 	if(g_auto_save_load){
-		state_save("-0");
+		state_save("0");
 	}
 	if(g_per_state_srm){
 		save_srm(0);
