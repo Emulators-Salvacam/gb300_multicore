@@ -61,6 +61,7 @@ static int16_t wrap_input_state_cb(unsigned port, unsigned device, unsigned inde
 static bool g_show_fps = false;
 static void frameskip_cb(BOOL flag);
 static bool g_per_state_srm = false;
+static bool g_auto_save_load = false;
 static bool g_enable_savestate_hotkeys = true;
 static bool g_enable_osd = true;
 static bool g_osd_small_messages = false;
@@ -180,7 +181,12 @@ void load_srm(const char slot){
 }
 
 void wrap_retro_unload_game(void){
-	save_srm(0);
+	if(g_auto_save_load){
+		state_save("-0");
+	}
+	if(g_per_state_srm){
+		save_srm(0);
+	}
 	retro_unload_game();
 }
 
@@ -388,12 +394,19 @@ bool wrap_retro_load_game(const struct retro_game_info* info)
 		config_get_bool(s_core_config, "sf2000_enable_osd", &g_enable_osd);
 		config_get_bool(s_core_config, "sf2000_osd_small_messages", &g_osd_small_messages);
 		config_get_bool(s_core_config, "sf2000_continuous_slot_change", &g_continuous_slot_change);
+		config_get_bool(s_core_config, "sf2000_auto_save_load", &g_auto_save_load);
 
 		// make sure the first two controllers are configured as gamepads
 		retro_set_controller_port_device(0, RETRO_DEVICE_JOYPAD);
 		retro_set_controller_port_device(1, RETRO_DEVICE_JOYPAD);
 
-		load_srm(0);
+		if (g_auto_save_load){
+			state_load("");
+		}
+
+		if (g_per_state_srm){
+			load_srm(0);
+		}
 	}
 
 	return ret;
@@ -598,6 +611,7 @@ char build_state_filepath(char *state_filepath, size_t size, const char *game_fi
 //	"/mnt/sda1/ROMS/save/[core]/Alien Crush.state[slot]"
 	struct retro_system_info sysinfo;
 	retro_get_system_info(&sysinfo);
+	xlog("frontend_state_filepath: %s\n", frontend_state_filepath);
 
 	// last char is the save slot number
 	char save_slot = frontend_state_filepath[strlen(frontend_state_filepath) - 1];
