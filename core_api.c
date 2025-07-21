@@ -17,6 +17,7 @@
 #define HOTKEYLOADSTATE 0x9800 // press L + R + Y
 #define HOTKEYINCREASESTATE 0x9020 //press L + R + Right
 #define HOTKEYDECREASESTATE 0x9080 // press L + R + LEFT
+#define HOTKEYCHEAT 0x9080 // press L + R + LEFT
 #define DELAYTIMECHANGESLOT 250
 
 #define MAXPATH 	255
@@ -66,6 +67,7 @@ static bool g_enable_savestate_hotkeys = true;
 static bool g_enable_osd = true;
 static bool g_osd_small_messages = false;
 static bool g_continuous_slot_change = true;
+static bool g_enable_keymap = false;
 
 static bool g_opt_per_game = false;
 static bool g_create_opt_per_game = false;
@@ -74,10 +76,12 @@ static void dummy_retro_run(void);
 
 static int *fw_fps_counter_enable = (int *)0x806f7698;
 static int *fw_fps_counter = (int *)0x806f7694;
-static char *fw_fps_counter_format = (int *)0x806674a0;	// "%2d/%2d"
+static char *fw_fps_counter_format = (char *)0x806674a0;	// "%2d/%2d"
 static void fps_counter_enable(bool enable);
 
 static bool gb_temporary_osd = false;
+
+#define KEYMAP_SIZE 12
 
 struct retro_core_t core_exports = {
    .retro_init = wrap_retro_init,
@@ -127,6 +131,48 @@ void check_dir()
 	strcat(directory, sysinfo.library_name);
 
 	create_dir(directory); // Make sure SAVE_DIRECTORY/sysinfo.library_name exists
+}
+
+// Loads the keymap configuration for the game.
+void load_keymap(const char *s_game_filepath)
+{
+	struct retro_system_info sysinfo;
+	retro_get_system_info(&sysinfo);
+
+	char kmp_filepath[MAXPATH];
+
+	char basename[MAXPATH];
+	fill_pathname_base(basename, s_game_filepath, sizeof(basename));
+	path_remove_extension(basename);
+
+	// Rom keymap
+	snprintf(kmp_filepath, sizeof(kmp_filepath), "%s/%s/keymaps/%s.kmp", CONFIG_DIRECTORY, sysinfo.library_name, basename);
+	xlog("Checking keymap in %s...\n", kmp_filepath);
+
+	// if ROM keymap doesn't exist load Core keymap
+	if (fs_access(kmp_filepath, 0) != 0) {
+		snprintf(kmp_filepath, sizeof(kmp_filepath), "%s/%s.kmp", CONFIG_DIRECTORY, sysinfo.library_name);
+		xlog("Checking keymap in %s...\n", kmp_filepath);
+	}
+
+	// if Core keymap doesn't exist load Multicore keymap
+	if (fs_access(kmp_filepath, 0) != 0) {
+		snprintf(kmp_filepath, sizeof(kmp_filepath), "%s/multicore.kmp", CONFIG_DIRECTORY);
+		xlog("Checking keymap in %s...\n", kmp_filepath);
+	}
+
+	// if no keymap, just return
+	if (fs_access(kmp_filepath, 0) != 0) return;
+
+	uint32_t keymap[KEYMAP_SIZE];
+	FILE *h_file = NULL;
+	h_file = fopen(kmp_filepath, "rb");
+
+	size_t elements_read = fread(keymap, sizeof(uint32_t), KEYMAP_SIZE, h_file);
+	fclose(h_file);
+
+    set_keymap(keymap, 8);
+	xlog("Keymap file %s loaded\n", kmp_filepath);
 }
 
 void build_srm_filepath(char *filepath, size_t size, const char *game_filepath, const char *extension, size_t extension_size) {
@@ -379,7 +425,13 @@ bool wrap_retro_load_game(const struct retro_game_info* info)
 	else
 	{
 		xlog("retro_load_game ok\n");
-		
+
+		// load keymap
+		config_get_bool(s_core_config, "sf2000_enabled_keymap", &g_enable_keymap);
+		if (g_enable_keymap) {
+			load_keymap(s_game_filepath);
+		}
+
 		video_options(s_core_config);
 
 		// show FPS?
@@ -395,6 +447,7 @@ bool wrap_retro_load_game(const struct retro_game_info* info)
 		config_get_bool(s_core_config, "sf2000_osd_small_messages", &g_osd_small_messages);
 		config_get_bool(s_core_config, "sf2000_continuous_slot_change", &g_continuous_slot_change);
 		config_get_bool(s_core_config, "sf2000_auto_save_load", &g_auto_save_load);
+
 
 		// make sure the first two controllers are configured as gamepads
 		retro_set_controller_port_device(0, RETRO_DEVICE_JOYPAD);

@@ -57,6 +57,8 @@ retro_environment_cb		= 0x8030cd54;
 run_emulator	= 0x8030d008;
 run_gba			= 0x8030e4bc;
 
+set_keymap      = 0x8030ca4c;
+
 /* .data */
 RAMSIZE	= 0x806f5e84;
 /* using errno */
