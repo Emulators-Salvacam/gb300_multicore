@@ -13,11 +13,11 @@
 #include "stockfw.h"
 #include "video_sf2000.h"
 
-#define HOTKEYSAVESTATE 0x9400 // press L + R + X
-#define HOTKEYLOADSTATE 0x9800 // press L + R + Y
-#define HOTKEYINCREASESTATE 0x9020 //press L + R + Right
-#define HOTKEYDECREASESTATE 0x9080 // press L + R + LEFT
-#define HOTKEYCHEAT 0x9080 // press L + R + LEFT
+#define HOTKEYSAVESTATE 0x9400 		// press L + R + X
+#define HOTKEYLOADSTATE 0x9800 		// press L + R + Y
+#define HOTKEYINCREASESTATE 0x9020 	// press L + R + RIGHT
+#define HOTKEYDECREASESTATE 0x9080 	// press L + R + LEFT
+#define HOTKEYCHEAT 0x9008 			// press L + R + START
 #define DELAYTIMECHANGESLOT 250
 
 #define MAXPATH 	255
@@ -68,6 +68,7 @@ static bool g_enable_osd = true;
 static bool g_osd_small_messages = false;
 static bool g_continuous_slot_change = true;
 static bool g_enable_keymap = false;
+static bool g_enable_cheat = false;
 
 static bool g_opt_per_game = false;
 static bool g_create_opt_per_game = false;
@@ -82,6 +83,12 @@ static void fps_counter_enable(bool enable);
 static bool gb_temporary_osd = false;
 
 #define KEYMAP_SIZE 12
+
+#define MAX_CHEAT_LENGTH 200
+#define MAX_CHEATS 100
+static char *gc_cheats[MAX_CHEATS];  // Array of strings to store lines
+static int gi_cheat_count = 0;  // Keeps track of the number of lines read
+static bool gb_cheats_enabled = false;
 
 struct retro_core_t core_exports = {
    .retro_init = wrap_retro_init,
@@ -147,18 +154,18 @@ void load_keymap(const char *s_game_filepath)
 
 	// Rom keymap
 	snprintf(kmp_filepath, sizeof(kmp_filepath), "%s/%s/keymaps/%s.kmp", CONFIG_DIRECTORY, sysinfo.library_name, basename);
-	xlog("Checking keymap in %s...\n", kmp_filepath);
+	xlog("Checking keymap in %s\n", kmp_filepath);
 
 	// if ROM keymap doesn't exist load Core keymap
 	if (fs_access(kmp_filepath, 0) != 0) {
 		snprintf(kmp_filepath, sizeof(kmp_filepath), "%s/%s.kmp", CONFIG_DIRECTORY, sysinfo.library_name);
-		xlog("Checking keymap in %s...\n", kmp_filepath);
+		xlog("Checking keymap in %s\n", kmp_filepath);
 	}
 
 	// if Core keymap doesn't exist load Multicore keymap
 	if (fs_access(kmp_filepath, 0) != 0) {
 		snprintf(kmp_filepath, sizeof(kmp_filepath), "%s/multicore.kmp", CONFIG_DIRECTORY);
-		xlog("Checking keymap in %s...\n", kmp_filepath);
+		xlog("Checking keymap in %s\n", kmp_filepath);
 	}
 
 	// if no keymap, just return
@@ -173,6 +180,76 @@ void load_keymap(const char *s_game_filepath)
 
     set_keymap(keymap, 8);
 	xlog("Keymap file %s loaded\n", kmp_filepath);
+}
+
+/** 
+ * Loads cheat codes for a game.
+ */
+void load_cheats(const char *s_game_filepath)
+{
+	struct retro_system_info sysinfo;
+	retro_get_system_info(&sysinfo);
+
+	char cht_filepath[MAXPATH];
+
+	char basename[MAXPATH];
+	fill_pathname_base(basename, s_game_filepath, sizeof(basename));
+	path_remove_extension(basename);
+
+	// Rom keymap
+	snprintf(cht_filepath, sizeof(cht_filepath), "%s/%s/cheats/%s.cht", CONFIG_DIRECTORY, sysinfo.library_name, basename);
+	xlog("Checking for cheat codes in %s\n", cht_filepath);
+
+	FILE *h_file = fopen(cht_filepath, "r");
+	if (!h_file)
+	{
+		xlog("No cheat codes file found\n");
+		return;
+	}
+
+	char buffer[MAX_CHEAT_LENGTH]; // Temporary buffer
+	while (fgets(buffer, MAX_CHEAT_LENGTH, h_file) && gi_cheat_count < MAX_CHEATS)
+	{
+		// Remove newline character at the end if exists
+		buffer[strcspn(buffer, "\n\r")] = 0;
+
+		// Allocate memory for the line and store it in the global array
+		gc_cheats[gi_cheat_count] = (char *)malloc(strlen(buffer) + 1);
+		if (gc_cheats[gi_cheat_count])
+		{
+			strcpy(gc_cheats[gi_cheat_count], buffer);
+			gi_cheat_count++;
+		}
+	}
+	fclose(h_file);
+	xlog("Cheat codes loaded\n");
+}
+
+void unload_cheats()
+{
+	for (int i = 0; i < gi_cheat_count; i++)
+	{
+        free(gc_cheats[i]);
+    }
+}
+
+void toggle_cheat()
+{
+	gb_cheats_enabled = !gb_cheats_enabled;
+	if (gb_cheats_enabled)
+	{
+		xlog("Activate cheats\n");
+		retro_cheat_reset();
+		for (int i = 0; i < gi_cheat_count; i++)
+		{
+			retro_cheat_set(i, true, gc_cheats[i]);
+		}
+	}
+	else
+	{
+		xlog("Deactivate cheats\n");
+		retro_cheat_reset();
+	}
 }
 
 void build_srm_filepath(char *filepath, size_t size, const char *game_filepath, const char *extension, size_t extension_size) {
@@ -233,6 +310,11 @@ void wrap_retro_unload_game(void){
 	if(g_per_state_srm){
 		save_srm(0);
 	}
+
+	if (g_enable_cheat) {
+		unload_cheats();
+	}
+
 	retro_unload_game();
 }
 
@@ -432,6 +514,12 @@ bool wrap_retro_load_game(const struct retro_game_info* info)
 			load_keymap(s_game_filepath);
 		}
 
+		// load cheats
+		config_get_bool(s_core_config, "sf2000_enabled_cheat", &g_enable_cheat);
+		if (g_enable_cheat) {		
+			load_cheats(s_game_filepath);
+		}
+
 		video_options(s_core_config);
 
 		// show FPS?
@@ -474,7 +562,7 @@ char osd_message[MAXPATH];
 int show_osd_message(const char *message) {
 	if (g_enable_osd) {
 		gb_temporary_osd = true;
-		if (!g_show_fps) *fw_fps_counter_enable = 1;
+		if (!g_show_fps) *fw_fps_counter_enable = 1; // Don't change fps if fps is enabled
 		sprintf(fw_fps_counter_format, message);
 		g_osd_time = os_get_tick_count();
 	}
@@ -486,23 +574,25 @@ void wrap_retro_run(void) {
 		// Disable the osd message after 2 seconds
 		if (gb_temporary_osd) {
 			if (os_get_tick_count() - g_osd_time > 1000) {
-				if (!g_show_fps) *fw_fps_counter_enable = 0;
+				if (!g_show_fps) *fw_fps_counter_enable = 0; // Don't change fps if fps is enabled
 				gb_temporary_osd = false;
 			}
 		} else if (g_joy_task_state == HOTKEYSAVESTATE) {
 			state_save("");
 			g_osd_small_messages ? sprintf(osd_message, "S:%d", slot_state) : sprintf(osd_message, "Save: %d", slot_state);
-			show_osd_message(osd_message);
-			//Reset g_joy_state for not press buttons
-			g_joy_state = 0x0000;
+			show_osd_message(osd_message);			
+			g_joy_state = 0x0000; //Reset g_joy_state for not press buttons
 		} else if (g_joy_task_state == HOTKEYLOADSTATE) { 	
 			state_load("");
 			g_osd_small_messages ? sprintf(osd_message, "L:%d", slot_state) : sprintf(osd_message, "Load: %d", slot_state);
 			show_osd_message(osd_message);
-			//Reset g_joy_state for not press buttons
-			g_joy_state = 0x0000;
-		}
-		if ((g_joy_task_state == HOTKEYINCREASESTATE || g_joy_task_state == HOTKEYDECREASESTATE) 
+			g_joy_state = 0x0000; //Reset g_joy_state for not press buttons
+		} else if ( g_joy_task_state == HOTKEYCHEAT && g_enable_cheat) {
+			toggle_cheat();
+			g_osd_small_messages ? sprintf(osd_message, "C:%c", gb_cheats_enabled ? 'a' : 'd') : sprintf(osd_message, "Cheat: %s", gb_cheats_enabled ? "active" : "deactive");
+			show_osd_message(osd_message);
+			g_joy_state = 0x0000; //Reset g_joy_state for not press buttons
+		} else if ((g_joy_task_state == HOTKEYINCREASESTATE || g_joy_task_state == HOTKEYDECREASESTATE) 
 				&& (os_get_tick_count() - slot_delay_time > DELAYTIMECHANGESLOT)) { 
 			if (g_joy_task_state == HOTKEYINCREASESTATE) { 	
 				if (slot_state < 9) {
@@ -520,8 +610,7 @@ void wrap_retro_run(void) {
 			g_osd_small_messages ? sprintf(osd_message, "s:%d", slot_state) : sprintf(osd_message, "Slot: %d", slot_state);
 			show_osd_message(osd_message);
 			slot_delay_time = os_get_tick_count();
-			//Reset g_joy_state for not press buttons
-			g_joy_state = 0x0000;
+			g_joy_state = 0x0000; //Reset g_joy_state for not press buttons
 		} 
 	}
 	
