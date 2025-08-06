@@ -988,6 +988,7 @@ static void dummy_retro_run(void)
 
 static void fps_counter_enable(bool enable)
 {
+	xlog("FPS counter enable: %d\n", enable);
 	if (enable)
 	{
 		*fw_fps_counter_enable = 1;
@@ -1023,6 +1024,7 @@ void wrap_video_refresh_cb(const void *data, unsigned width, unsigned height, si
 		// fps_counter2 = count_all / sec;
 
 		sprintf(fw_fps_counter_format, "%2d/%2d", count_not_skipped, count_all);
+		*fw_fps_counter = count_not_skipped;
 
 		prev_msec = curr_msec;
 		count_all = 0;
