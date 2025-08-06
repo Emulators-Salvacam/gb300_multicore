@@ -15,7 +15,7 @@ void xlog(const char *fmt, ...);
     void lcd_send_data(unsigned short);
     void lcd_init();
     void lcd_bsod(const char *fmt, ...) __attribute__((noreturn));
-    void dbg_show_noblock(unsigned short background_color, const char *fmt, ...);
+    void dbg_show_noblock(unsigned short text_color, unsigned short background_color, const char *fmt, ...);
 #else
     #define lcd_pinmux_gpio(...) ((void)0)
     #define lcd_send_cmd(...) ((void)0)
