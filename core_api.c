@@ -98,7 +98,6 @@ static bool gb_cheats_enabled = false;
 
 static uint16_t* rgb565_darken_buffer = NULL;
 static bool g_enable_darken_filter = true;
-static bool g_enable_darken_hotkey = true;
 static int buffer_prev_width = 0, buffer_prev_height = 0, g_darken_percentage = 0;
 
 struct retro_core_t core_exports = {
@@ -539,7 +538,6 @@ bool wrap_retro_load_game(const struct retro_game_info* info)
 
 		// Darkening filter?
 		config_get_bool(s_core_config, "sf2000_enable_darken_filter", &g_enable_darken_filter);
-		config_get_bool(s_core_config, "sf2000_enable_darken_hotkey", &g_enable_darken_hotkey);
 		config_get_uint(s_core_config, "sf2000_darken_percentage", &g_darken_percentage);
 
 
@@ -631,19 +629,13 @@ void wrap_retro_run(void) {
 		} else if ((g_joy_task_state == HOTKEYINCREASEDARKEN || g_joy_task_state == HOTKEYDECREASEDARKEN) 
 				&& (os_get_tick_count() - slot_delay_time > DELAYTIMECHANGESLOT)) { 
 			if (g_joy_task_state == HOTKEYINCREASEDARKEN) { 	
-				if (g_darken_percentage < 100) {
-				  g_darken_percentage += 10;
+				if (g_darken_percentage < 9) {
+				  g_darken_percentage += 1;
 				} 
-				if (g_darken_percentage > 100) {
-					g_darken_percentage = 100;
-				}
 			} else if (g_joy_task_state == HOTKEYDECREASEDARKEN) { 	
 				if (g_darken_percentage > 0) {
-				  g_darken_percentage -= 10;
+				  g_darken_percentage -= 1;
 				}
-				if (g_darken_percentage < 0) {
-					g_darken_percentage = 0;
-				} 
 			}
 			g_osd_small_messages ? sprintf(osd_message, "d:%d", g_darken_percentage) : sprintf(osd_message, "Dark: %d", g_darken_percentage);
 			show_osd_message(osd_message);
@@ -1032,16 +1024,20 @@ static void fps_counter_enable(bool enable)
 	if (enable)
 	{
 		*fw_fps_counter_enable = 1;
-		retro_set_video_refresh(wrap_video_refresh_cb);
+		//retro_set_video_refresh(wrap_video_refresh_cb);
 	}
 	else
 	{
 		*fw_fps_counter_enable = 0;
+		/*
 		if (g_xrgb888)
 			retro_set_video_refresh(xrgb8888_video_refresh_cb);
 		else
 			retro_set_video_refresh(retro_video_refresh_cb);
+		*/
 	}
+
+	retro_set_video_refresh(wrap_video_refresh_cb);
 }
 
 
@@ -1051,6 +1047,9 @@ void darken_rgb565_buffer(const void* buffer, unsigned width, unsigned height,si
     uint16_t* dst = rgb565_darken_buffer;
     unsigned pixel_count = width * height;
 
+    // Convert darken_percentage (0-9) to darken_percentage (0-90)
+	darken_percentage = darken_percentage * 10;
+	
     // Convert darken_percentage (0-100) to darken_factor_256 (0-255)
 	uint8_t darken_factor_256 = ((100 - darken_percentage) * 255) / 100;
 
@@ -1089,7 +1088,7 @@ void wrap_video_refresh_cb(const void *data, unsigned width, unsigned height, si
 	if (data)
 		++count_not_skipped;
 
-	if (curr_msec - prev_msec > 1000)
+	if (g_show_fps && (curr_msec - prev_msec > 1000))
 	{
 		// im not sure that using floats math will calc the fps much more accurately
 		// float sec = ((curr_msec - prev_msec) / 1000.0f);
