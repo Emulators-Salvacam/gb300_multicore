@@ -627,7 +627,8 @@ void wrap_retro_run(void) {
 			slot_delay_time = os_get_tick_count();
 			g_joy_state = 0x0000; //Reset g_joy_state for not press buttons
 		} else if ((g_joy_task_state == HOTKEYINCREASEDARKEN || g_joy_task_state == HOTKEYDECREASEDARKEN) 
-				&& (os_get_tick_count() - slot_delay_time > DELAYTIMECHANGESLOT)) { 
+				&& (os_get_tick_count() - slot_delay_time > DELAYTIMECHANGESLOT)
+				&& g_enable_darken_filter) { 
 			if (g_joy_task_state == HOTKEYINCREASEDARKEN) { 	
 				if (g_darken_percentage < 9) {
 				  g_darken_percentage += 1;
@@ -1049,7 +1050,7 @@ void darken_rgb565_buffer(const void* buffer, unsigned width, unsigned height,si
 
     // Convert darken_percentage (0-9) to darken_percentage (0-90)
 	darken_percentage = darken_percentage * 10;
-	
+
     // Convert darken_percentage (0-100) to darken_factor_256 (0-255)
 	uint8_t darken_factor_256 = ((100 - darken_percentage) * 255) / 100;
 
@@ -1120,7 +1121,7 @@ void wrap_video_refresh_cb(const void *data, unsigned width, unsigned height, si
 	else {
 		if (data && g_enable_darken_filter) {
 			darken_rgb565_buffer(data, width, height, pitch, g_darken_percentage);
-			retro_video_refresh_cb(rgb565_darken_buffer, width, height, pitch);
+			retro_video_refresh_cb(rgb565_darken_buffer, width, height, width * 2);
 		} else { // Handle null data or no filter
 			retro_video_refresh_cb(data, width, height, pitch);
 		}
