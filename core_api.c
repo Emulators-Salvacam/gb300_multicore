@@ -13,12 +13,18 @@
 #include "stockfw.h"
 #include "video_sf2000.h"
 
+// Hotkeys
+// Up = 10, Down = 40, Left = 80, Right = 20
+// Select = 1, Start = 8
+// A = 2000, B = 4000. X = 400, Y = 800, L = 1000, R = 8000
 #define HOTKEYSAVESTATE 0x9400 		// press L + R + X
 #define HOTKEYLOADSTATE 0x9800 		// press L + R + Y
 #define HOTKEYINCREASESTATE 0x9020 	// press L + R + RIGHT
 #define HOTKEYDECREASESTATE 0x9080 	// press L + R + LEFT
 #define HOTKEYCHEAT 0x9008 			// press L + R + START
 #define DELAYTIMECHANGESLOT 250
+#define HOTKEYINCREASEDARKEN 0x9010 // press L + R + UP
+#define HOTKEYDECREASEDARKEN 0x9040 // press L + R + DOWN
 
 #define MAXPATH 	255
 #define SYSTEM_DIRECTORY	"/mnt/sda1/bios"
@@ -89,6 +95,11 @@ static bool gb_temporary_osd = false;
 static char *gc_cheats[MAX_CHEATS];  // Array of strings to store lines
 static int gi_cheat_count = 0;  // Keeps track of the number of lines read
 static bool gb_cheats_enabled = false;
+
+static uint16_t* rgb565_darken_buffer = NULL;
+static bool g_enable_darken_filter = true;
+static bool g_enable_darken_hotkey = true;
+static int buffer_prev_width = 0, buffer_prev_height = 0, g_darken_percentage = 0;
 
 struct retro_core_t core_exports = {
    .retro_init = wrap_retro_init,
@@ -526,6 +537,12 @@ bool wrap_retro_load_game(const struct retro_game_info* info)
 		config_get_bool(s_core_config, "sf2000_show_fps", &g_show_fps);
 		fps_counter_enable(g_show_fps);
 
+		// Darkening filter?
+		config_get_bool(s_core_config, "sf2000_enable_darken_filter", &g_enable_darken_filter);
+		config_get_bool(s_core_config, "sf2000_enable_darken_hotkey", &g_enable_darken_hotkey);
+		config_get_uint(s_core_config, "sf2000_darken_percentage", &g_darken_percentage);
+
+
 		// per state srm?
 		config_get_bool(s_core_config, "sf2000_per_state_srm", &g_per_state_srm);
 
@@ -608,6 +625,27 @@ void wrap_retro_run(void) {
 				}
 			}
 			g_osd_small_messages ? sprintf(osd_message, "s:%d", slot_state) : sprintf(osd_message, "Slot: %d", slot_state);
+			show_osd_message(osd_message);
+			slot_delay_time = os_get_tick_count();
+			g_joy_state = 0x0000; //Reset g_joy_state for not press buttons
+		} else if ((g_joy_task_state == HOTKEYINCREASEDARKEN || g_joy_task_state == HOTKEYDECREASEDARKEN) 
+				&& (os_get_tick_count() - slot_delay_time > DELAYTIMECHANGESLOT)) { 
+			if (g_joy_task_state == HOTKEYINCREASEDARKEN) { 	
+				if (g_darken_percentage < 100) {
+				  g_darken_percentage += 10;
+				} 
+				if (g_darken_percentage > 100) {
+					g_darken_percentage = 100;
+				}
+			} else if (g_joy_task_state == HOTKEYDECREASEDARKEN) { 	
+				if (g_darken_percentage > 0) {
+				  g_darken_percentage -= 10;
+				}
+				if (g_darken_percentage < 0) {
+					g_darken_percentage = 0;
+				} 
+			}
+			g_osd_small_messages ? sprintf(osd_message, "d:%d", g_darken_percentage) : sprintf(osd_message, "Dark: %d", g_darken_percentage);
 			show_osd_message(osd_message);
 			slot_delay_time = os_get_tick_count();
 			g_joy_state = 0x0000; //Reset g_joy_state for not press buttons
@@ -896,7 +934,9 @@ void wrap_retro_deinit(void)
 	retro_deinit();
 	config_free();
 
-	if (s_rgb565_convert_buffer)
+	if (rgb565_darken_buffer) 
+		free(rgb565_darken_buffer);
+	if (s_rgb565_convert_buffer) 
 		free(s_rgb565_convert_buffer);
 }
 
@@ -1004,6 +1044,39 @@ static void fps_counter_enable(bool enable)
 	}
 }
 
+
+void darken_rgb565_buffer(const void* buffer, unsigned width, unsigned height,size_t pitch_bytes, uint8_t darken_percentage)
+{
+    const uint16_t* src = (const uint16_t*)buffer;
+    uint16_t* dst = rgb565_darken_buffer;
+    unsigned pixel_count = width * height;
+
+    // Convert darken_percentage (0-100) to darken_factor_256 (0-255)
+	uint8_t darken_factor_256 = ((100 - darken_percentage) * 255) / 100;
+
+	for (unsigned y = 0; y < height; y++) {
+     const uint16_t* src_row = (const uint16_t*)((const uint8_t*)src + y * pitch_bytes);
+     uint16_t* dst_row = dst + y * width;
+
+     for (unsigned x = 0; x < width; x++) {
+         uint16_t pixel = src_row[x];
+
+         // Extract RGB components
+         uint8_t r5 = (pixel >> 11) & 0x1F;
+         uint8_t g6 = (pixel >> 5) & 0x3F;
+         uint8_t b5 = pixel & 0x1F;
+
+         // Darken components
+         r5 = (r5 * darken_factor_256) >> 8;
+         g6 = (g6 * darken_factor_256) >> 8;
+         b5 = (b5 * darken_factor_256) >> 8;
+
+         // Repack components
+         dst_row[x] = (r5 << 11) | (g6 << 5) | b5;
+     }
+	}
+}
+
 void wrap_video_refresh_cb(const void *data, unsigned width, unsigned height, size_t pitch)
 {
 	static uint32_t prev_msec = 0;
@@ -1031,12 +1104,26 @@ void wrap_video_refresh_cb(const void *data, unsigned width, unsigned height, si
 		count_not_skipped = 0;
 	}
 
+	if (!rgb565_darken_buffer || width != buffer_prev_width || height != buffer_prev_height) { // AV Out changes resolution?
+    	if (rgb565_darken_buffer) 
+    		free(rgb565_darken_buffer);
+
+    	rgb565_darken_buffer = malloc(width * height * 2);
+    	buffer_prev_width = width;
+    	buffer_prev_height = height;
+	}
+
 	if (g_xrgb888)
 	{
 		convert_xrgb8888_to_rgb565((void*)data, width, height, pitch);
 		retro_video_refresh_cb(s_rgb565_convert_buffer, width, height, width * 2);		// each pixel is now 16bit, so pass the pitch as width*2
 	}
 	else {
-		retro_video_refresh_cb(data, width, height, pitch);
+		if (data && g_enable_darken_filter) {
+			darken_rgb565_buffer(data, width, height, pitch, g_darken_percentage);
+			retro_video_refresh_cb(rgb565_darken_buffer, width, height, pitch);
+		} else { // Handle null data or no filter
+			retro_video_refresh_cb(data, width, height, pitch);
+		}
 	}
 }
